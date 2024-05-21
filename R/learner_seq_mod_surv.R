@@ -1,26 +1,3 @@
-#' @title Survival Rgcca For Dimension Reduction Followed By Glmnet For Surv Prediction Learner
-#' @author Unknown
-#' @name mlr_learners_surv.rgcca
-#'
-#' @description
-#' FIXME: BRIEF DESCRIPTION OF THE LEARNER.
-#' Calls [RGCCA::RGCCA()] from FIXME: (CRAN VS NO CRAN): \CRANpkg{RGCCA} | 'RGCCA'.
-#'
-#' @section Initial parameter values:
-#' FIXME: DEVIATIONS FROM UPSTREAM PARAMETERS. DELETE IF NOT APPLICABLE.
-#'
-#' @section Custom mlr3 parameters:
-#' FIXME: DEVIATIONS FROM UPSTREAM DEFAULTS. DELETE IF NOT APPLICABLE.
-#'
-#' @templateVar id surv.rgcca
-#' @template learner
-#'
-#' @references
-#' `r format_bib(FIXME: ONE OR MORE REFERENCES FROM bibentries.R)`
-#'
-#' @template seealso_learner
-#' @template example
-#' @export
 LearnerSeqMod = R6::R6Class("LearnerSeqMod",
   inherit = mlr3proba::LearnerSurv,
   public = list(
@@ -64,7 +41,7 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
     },
     .train = function(task) {
 
-      source("R/misc/learner_utils.R")
+      #source("R/misc/learner_utils.R")
       # get parameters for training
       pars = self$param_set$get_values(tags="train")
 

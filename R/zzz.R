@@ -29,7 +29,7 @@ register_mlr3 = function(libname, pkgname) {
 }
 
 .onLoad = function(libname, pkgname) { # nolint
-  register_namespace_callback(pkgname, "mlr3", register_mlr3)
+  mlr3misc::register_namespace_callback(pkgname, "mlr3", register_mlr3)
 }
 
 .onUnload = function(libpath) { # nolint
@@ -42,4 +42,4 @@ register_mlr3 = function(libname, pkgname) {
 
 # nocov end
 
-leanify_package()
+mlr3misc::leanify_package()

@@ -1,48 +1,8 @@
-#' @title Survival Cox Model with Cross-Validation Likelihood Based Boosting Learner
-#' @author RaphaelS1
-#' @name mlr_learners_surv.cv_coxboost
-#'
-#' @description
-#' Fits a survival Cox model using likelihood based boosting and interal cross-validation for the
-#' number of steps.
-#' Calls [CoxBoost::CoxBoost()] or [CoxBoost::cv.CoxBoost()] from package 'CoxBoost'.
-#'
-#' @template learner
-#' @templateVar id surv.cv_coxboost
-#'
-#' @template install_coxboost
-#'
-#' @details
-#' Use [LearnerSurvCoxboost] and [LearnerSurvCVCoxboost] for Cox boosting without and with internal
-#' cross-validation of boosting step number, respectively. Tuning using the internal optimizer in
-#' [LearnerSurvCVCoxboost] may be more efficient when tuning `stepno` only. However, for tuning
-#' multiple hyperparameters, \CRANpkg{mlr3tuning} and [LearnerSurvCoxboost] will likely give better
-#' results.
-#'
-#' If `penalty == "optimCoxBoostPenalty"` then [CoxBoost::optimCoxBoostPenalty] is used to determine
-#' the penalty value to be used in [CoxBoost::cv.CoxBoost].
-#'
-#' Three prediction types are returned for this learner, using the internal
-#' `predict.CoxBoost()` function:
-#' 1. `lp`: a vector of linear predictors (relative risk scores), one per
-#' observation.
-#' 2. `crank`: same as `lp`.
-#' 2. `distr`: a 2d survival matrix, with observations as rows and time points
-#' as columns. The internal transformation uses the Breslow estimator to compose
-#' the survival distributions from the `lp` predictions.
-#'
-#' @references
-#' `r format_bib("binder2009boosting")`
-#'
-#' @template seealso_learner
-#' @template example
 #' @export
-LearnerSurvCVCoxboostClinFav = R6Class("LearnerSurvCVCoxboost",
+LearnerSurvCVCoxboostClinFav = R6::R6Class("LearnerSurvCVCoxboostClinFav",
   inherit = mlr3proba::LearnerSurv,
 
   public = list(
-    #' @description
-    #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function() {
       ps = ps(
         maxstepno = p_int(default = 100, lower = 0, tags = "train"),
@@ -73,20 +33,11 @@ LearnerSurvCVCoxboostClinFav = R6Class("LearnerSurvCVCoxboost",
         predict_types = c("distr", "crank", "lp"),
         param_set = ps,
         properties = c("weights", "selected_features"),
-        man = "mlr3extralearners::mlr_learners_surv.cv_coxboost",
+        man = "",
         label = "Likelihood-based Boosting"
       )
     },
 
-    #' @description
-    #' Returns the set of selected features which have non-zero coefficients.
-    #' Calls the internal `coef.CoxBoost()` function.
-    #'
-    #' @param at_step (`integer(1)`)\cr
-    #' Which boosting step to get the coefficients for. If no step is given
-    #' (default), the final boosting step is used.
-    #'
-    #' @return (`character()`) vector of feature names.
     selected_features = function(at_step = NULL) {
       if (is.null(self$model)) {
         stopf("No model stored")
@@ -199,5 +150,5 @@ LearnerSurvCVCoxboostClinFav = R6Class("LearnerSurvCVCoxboost",
 )
 
 #.extralrns_dict$add("surv.cv_coxboost_clin_fav", LearnerSurvCVCoxboost)
-mlr3::mlr_learners$add("surv.cv_coxboost_clin_fav",
+.extralrns_dict$add("surv.cv_coxboost_clin_fav",
                        LearnerSurvCVCoxboostClinFav)

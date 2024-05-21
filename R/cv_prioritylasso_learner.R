@@ -1,16 +1,7 @@
-suppressPackageStartupMessages({
-  library(R6)
-  library(mlr3)
-  library(mlr3proba)
-  library(mlr3tuningspaces)
-  library(prioritylasso)
-})
-
-# Adapted from: https://github.com/mlr-org/mlr3extralearners/blob/main/R/learner_glmnet_surv_cv_glmnet.R
-
 #' Fits a BlockForest method using `mlr3` and `mlr3proba`.
 #' For full documentation of all parameters please refer to the documentation
 #' of `prioritylasso`.
+#' @export
 LearnerSurvCVPrioritylasso <- R6::R6Class("LearnerSurvCVPrioritylasso",
   inherit = mlr3proba::LearnerSurv,
   public = list(
@@ -80,12 +71,12 @@ LearnerSurvCVPrioritylasso <- R6::R6Class("LearnerSurvCVPrioritylasso",
       return(cox_helper)
     },
     .predict = function(task) {
-      suppressPackageStartupMessages({
-        source("R/misc/learner_imports.R")
-        source("R/misc/learner_utils.R")
-        library(pec)
-        library(mlr3proba)
-      })
+      #suppressPackageStartupMessages({
+        #source("R/misc/learner_imports.R")
+        #source("R/misc/learner_utils.R")
+        #library(pec)
+        #library(mlr3proba)
+      #})
 
       #newdata <- as_numeric_matrix(ordered_features(task, self))
       newdata = task$data()[,.SD, .SDcols=task$feature_names] # ensure target is not in data
@@ -106,4 +97,4 @@ LearnerSurvCVPrioritylasso <- R6::R6Class("LearnerSurvCVPrioritylasso",
   )
 )
 
-mlr_learners$add("surv.cv_prioritylasso", LearnerSurvCVPrioritylasso)
+.extralrns_dict$add("surv.cv_prioritylasso", LearnerSurvCVPrioritylasso)

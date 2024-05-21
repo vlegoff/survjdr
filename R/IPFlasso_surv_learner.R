@@ -1,5 +1,4 @@
-suppressPackageStartupMessages({library(R6)})
-
+#' @export
 LearnerSurvIPF = R6::R6Class("LearnerSurvIPF",
   inherit = mlr3proba::LearnerSurv,
   public = list(
@@ -26,7 +25,7 @@ LearnerSurvIPF = R6::R6Class("LearnerSurvIPF",
         predict_types = c("crank", "lp", "distr"),
         param_set = param_set,
         properties = c(),
-        man = "mlr3extralearners::mlr_learners_surv.rgcca",
+        man = "",
         label = "Regularized Generalized Canonical Correlation Analysis for Survival"
       )
     }
@@ -112,4 +111,4 @@ LearnerSurvIPF = R6::R6Class("LearnerSurvIPF",
   )
 )
 
-mlr3::mlr_learners$add("surv.ipflasso", LearnerSurvIPF)
+.extralrns_dict$add("surv.ipflasso", LearnerSurvIPF)

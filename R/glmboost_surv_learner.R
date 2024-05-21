@@ -1,25 +1,5 @@
-#' @title Boosted Generalized Linear Survival Learner
-#' @author RaphaelS1
-#' @name mlr_learners_surv.glmboost
-#'
-#' @description
-#' Fits a generalized linear survival model using a boosting algorithm.
-#' Calls [mboost::glmboost()] from \CRANpkg{mboost}.
-#'
-#' @template learner
-#' @templateVar id surv.glmboost
-#'
-#' @details
-#' `distr` prediction made by [mboost::survFit()].
-#'
-#' @references
-#' `r format_bib("buhlmann2003boosting")`
-#'
 #' @export
-#' @template seealso_learner
-#' @template example
-
-LearnerSurvGLMBoost = R6Class("LearnerSurvGLMBoost",
+LearnerSurvGLMBoost = R6::R6Class("LearnerSurvGLMBoost",
   inherit = mlr3proba::LearnerSurv,
   public = list(
     #' @description
@@ -60,7 +40,8 @@ LearnerSurvGLMBoost = R6Class("LearnerSurvGLMBoost",
         predict_types = c("distr", "crank", "lp"),
         properties = "weights",
         packages = c("mlr3extralearners", "mboost", "pracma"),
-        man = "mlr3extralearners::mlr_learners_surv.glmboost",
+        #man = "mlr3extralearners::mlr_learners_surv.glmboost",
+        man = "",
         label = "Boosted Generalized Linear Model"
       )
     }
@@ -181,4 +162,4 @@ LearnerSurvGLMBoost = R6Class("LearnerSurvGLMBoost",
   )
 )
 
-mlr3::mlr_learners$add("surv.glmboost", LearnerSurvGLMBoost)
+.extralrns_dict$add("surv.glmboost", LearnerSurvGLMBoost)

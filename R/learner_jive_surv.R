@@ -1,26 +1,3 @@
-
-#' @title Survival Rgcca For Dimension Reduction Followed By Glmnet For Surv Prediction Learner
-#' @author Unknown
-#' @name mlr_learners_surv.rgcca
-#'
-#' @description
-#' FIXME: BRIEF DESCRIPTION OF THE LEARNER.
-#' Calls [RGCCA::RGCCA()] from FIXME: (CRAN VS NO CRAN): \CRANpkg{RGCCA} | 'RGCCA'.
-#'
-#' @section Initial parameter values:
-#' FIXME: DEVIATIONS FROM UPSTREAM PARAMETERS. DELETE IF NOT APPLICABLE.
-#'
-#' @section Custom mlr3 parameters:
-#' FIXME: DEVIATIONS FROM UPSTREAM DEFAULTS. DELETE IF NOT APPLICABLE.
-#'
-#' @templateVar id surv.rgcca
-#' @template learner
-#'
-#' @references
-#' `r format_bib(FIXME: ONE OR MORE REFERENCES FROM bibentries.R)`
-#'
-#' @template seealso_learner
-#' @template example
 #' @export
 LearnerSurvJIVE = R6::R6Class("LearnerSurvJIVE",
   inherit = LearnerSeqMod,
@@ -127,4 +104,4 @@ LearnerSurvJIVE = R6::R6Class("LearnerSurvJIVE",
   )
 )
 
-mlr3::mlr_learners$add("surv.jive", LearnerSurvJIVE)
+.extralrns_dict$add("surv.jive", LearnerSurvJIVE)

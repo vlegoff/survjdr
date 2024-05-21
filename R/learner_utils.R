@@ -25,7 +25,7 @@ get_folds <- function(event, n_folds, n_samples) {
 #'
 #' @returns blocks character. Vector containing a mapping from feature to
 #'                            which modality it belongs, prefaced with "bp".
-#' @example
+#' @examples
 #' get_block_assignment(c("apple", "pear"), c("apple_feature_1", "pear_feature_1", "apple_feature_2")).
 #' Returns: c("bp1", "bp2", "bp1").
 get_block_assignment <- function(block_order, feature_names) {

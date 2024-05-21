@@ -3,6 +3,7 @@
 #' Fits a BlockForest method using `mlr3` and `mlr3proba`.
 #' For full documentation of all parameters please refer to the documentation
 #' of `BlockForest::blockfor`.
+#' @export
 LearnerSurvBlockForest <- R6::R6Class("LearnerSurvBlockForest",
   inherit = mlr3proba::LearnerSurv,
   public = list(
@@ -67,4 +68,4 @@ LearnerSurvBlockForest <- R6::R6Class("LearnerSurvBlockForest",
   )
 )
 
-mlr_learners$add("surv.blockforest", LearnerSurvBlockForest)
+.extralrns_dict$add("surv.blockforest", LearnerSurvBlockForest)
