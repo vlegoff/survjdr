@@ -149,6 +149,4 @@ LearnerSurvCVCoxboostClinFav = R6::R6Class("LearnerSurvCVCoxboostClinFav",
   )
 )
 
-#.extralrns_dict$add("surv.cv_coxboost_clin_fav", LearnerSurvCVCoxboost)
-.extralrns_dict$add("surv.cv_coxboost_clin_fav",
-                       LearnerSurvCVCoxboostClinFav)
+.extralrns_dict$add("surv.cv_coxboost_clin_fav", LearnerSurvCVCoxboostClinFav)
