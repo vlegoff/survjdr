@@ -2,6 +2,7 @@
 
 export(LearnerSurvBlockForest)
 export(LearnerSurvCVCoxboostClinFav)
+export(LearnerSurvCVPrioritylasso)
 export(LearnerSurvGLMBoost)
 export(LearnerSurvIPF)
 export(LearnerSurvJIVE)
