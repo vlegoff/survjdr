@@ -9,6 +9,7 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         blocks=p_uty(tags=c("train", "predict")),
         clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
         k=p_int(2L, 100L, default=2L, tags=c("train", "predict")),
+        weights=p_uty(default=NULL, tags=c("train")),
         nfolds=p_int(1L, default=10L, tags=c("train")),
         nlambdas=p_int(10L, 1000L, default=100L, tags=c("train")),
         CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
@@ -38,9 +39,14 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
 
     train_jdr = function(x, y, pars) {
 
+        if(is.null(pars$weights)) weights=rep(1, length(pars$blocks))
+        else if (length(blocks)==length(pars$weights)) weights=pars$weights
+        else stop("weights and blocks should have the same length")
+
         if(is.null(private$nmf_args)) {
             private$nmf_args = list(
               k=pars$k,
+              wt=weights,
               maxiter=200,
               st.count=20,
               n.ini=30,
@@ -73,55 +79,16 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
     },
 
     predict_jdr = function(newx, jdr, pars) {
-        #if(!is.null(private$cols)) {
-          #newx = lapply(names(newx),
-                        #function(n) newx[[n]][,private$cols[[n]]])
-        #}
         newx = lapply(names(newx),
                       function(n) newx[[n]][,jdr$cols[[n]]])
         n = names(newx)
         newx = lapply(seq_along(newx), function(i) newx[[i]] + private$mins[i])
         names(newx) = n
 
-        XHt = 0
-        HHt = 0
-        for(i in seq_along(newx)) {
-            XHt = XHt + newx[[i]] %*% t(jdr$fit[[i]]) 
-            HHt = HHt + jdr$fit[[i]] %*% t(jdr$fit[[i]])
-        }
-        latent_space2 = XHt %*% MASS::ginv(HHt)
-        #latent_space2 = latent_space2 + abs(min(latent_space2))
-
-        latent_space4 = IntNMF:::W.fcnnls(x=jdr$fit, y=newx,
-                                          weight=rep(1, length(jdr$fit)))
-        latent_space4 = t(latent_space4$coef)
-
-        newx = Reduce(cbind, newx)
-        H = Reduce(cbind, jdr$fit)
-        print(dim(H))
-        print(dim(newx))
-        # On the right track but need to use non negative least squares
-        #lm1 = lm(t(newx) ~ t(H) - 1)
-        # casting matrix nnls as a serie of nnls:
-        #nnlm = vector(mode="list", length=private$nmf_args$k)
-        latent_space = matrix(0, ncol=private$nmf_args$k, nrow=nrow(newx))
-        for(i in 1:nrow(latent_space)) {
-            nn = nnls::nnls(t(H), newx[i,])
-            #latent_space[,i] = coef(nnls::nnls(t(H), t(newx)[,i]))
-            latent_space[i,] = coef(nn)
-        }
-        latent_space3 = newx %*% t(H) %*% MASS::ginv(H %*% t(H))
-        #print(abs(min(latent_space3)))
-        #latent_space3 = latent_space3 + abs(min(latent_space3))
-        print(latent_space2)
-        print(latent_space3)
-        print(latent_space)
-        print(latent_space4)
-        print(latent_space3 - latent_space)
-        print(latent_space2 - latent_space4)
-
-        # latent_space4 seems closer to latent_space_train than the others
-        return(list(x=latent_space4))
+        latent_space = IntNMF:::W.fcnnls(x=jdr$fit, y=newx,
+                                          weight=private$nmf_args$weights)
+        latent_space = t(latent_space4$coef)
+        return(list(x=latent_space))
     }
 
   )
