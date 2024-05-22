@@ -72,9 +72,6 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         nmf_fit = mlr3misc::invoke(IntNMF::nmf.mnnals,
           .args=c(list(dat=x), private$nmf_args))
 
-        #print(nmf_fit$W)
-        print("trained")
-
         return(list(x=nmf_fit$W, jdr=list(fit=nmf_fit$H, cols=cols)))
     },
 
@@ -86,8 +83,8 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         names(newx) = n
 
         latent_space = IntNMF:::W.fcnnls(x=jdr$fit, y=newx,
-                                          weight=private$nmf_args$weights)
-        latent_space = t(latent_space4$coef)
+                                          weight=private$nmf_args$wt)
+        latent_space = t(latent_space$coef)
         return(list(x=latent_space))
     }
 
