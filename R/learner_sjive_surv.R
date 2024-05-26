@@ -16,6 +16,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
         CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
                            "basic", "V&VH", "linpred"), default="cindex",
                           tags=c("train")),
+        cv_save_path=p_uty(default=NULL, tags=c("predict")),
         seed=p_int(0L, special_vals=list(NULL), default=NULL, tags=c("train")),
         max.iter=p_int(1L, default=1000L, tags=c("train"))
       )

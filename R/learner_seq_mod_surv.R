@@ -9,7 +9,7 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
                           label=NA_character_, man=NA_character_) {
 
       necessary_pars = c("blocks", "clinical_fav", "nlambdas", "nfolds",
-        "CV_measure", "seed")
+        "CV_measure", "cv_save_path", "seed")
         # check if necessary pars are in pars set
         if (!all(necessary_pars %in% param_set$ids())) {
             stop("missing parameters")
@@ -227,11 +227,6 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       }
       best_lambda = lambdas[select_best(aggr_results)]
 
-      print(self$id)
-      #if(self$id=="surv.sjive" | self$id=="surv.intnmf") {
-          #private$cols = NULL
-      #}
-
       list(JDR=JDR$jdr,
            glmnet=glmnet_fit,
            best_lambda=best_lambda,
@@ -287,6 +282,19 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       lp = predict(self$model$glmnet,
                    newx=JDR_new$x,
                    s=self$model$best_lambda)
+
+      if (!is.null(pars$cv_save_path)) {
+        to_save = list(
+          task_id = task$id,
+          fold = task$row_ids,
+          lambdas = self$model$glmnet$lambda,
+          best_lambda = self$model$best_lambda,
+          cv_grid = self$model$cv_grid,
+          cv_results = self$model$cv_results
+        )
+        saveRDS(to_save, file=paste0(pars$cv_save_path, "/",
+          rlang::hash(to_save), ".rds"))
+      }
 
       return(mlr3proba::.surv_return(times=fit$time,
                                      surv=t(fit$surv),
