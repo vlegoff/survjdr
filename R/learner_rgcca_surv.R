@@ -10,6 +10,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
         tau=p_dbl(0, 1, default=1, tags=c("train")),
         clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
         supervised=p_lgl(default=FALSE, tags=c("train", "predict")),
+        supervised_mode=p_fct(c("null", "clinical"), default="null", tags=c("train")),
         ncomp=p_int(1L, default=1L, tags=c("train")),
         scheme=p_fct(c("horst", "factorial", "centroid"), default="factorial",
                       tags=c("train")),
@@ -66,8 +67,15 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
         }
 
         if(pars$supervised) {
-            null_mod = survival::coxph(y~1)
-            x[["residuals"]] = residuals(null_mod, type="deviance")
+            if(pars$supervised_mode=="null") {
+              null_mod = survival::coxph(y~1)
+              x[["residuals"]] = residuals(null_mod, type="deviance")
+            } else if (pars$supervised_mode=="clinical") {
+              clin_x = x[,grepl("clinical", colnames(x))]
+              print(colnames(clin_x))
+              clin_mod = survival::coxph(y~clin_x)
+              x[["residuals"]] = residuals(clin_mod, type="deviance")
+            }
         }
 
         rgcca_fit = mlr3misc::invoke(RGCCA::rgcca,
