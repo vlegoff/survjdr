@@ -70,14 +70,17 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       )
       names(block_list) <- pars$blocks
 
+      if (pars$clinical_fav) {
+        clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
+      } 
+
       # special block for supervising RGCCA with residuals of clinical model
-      if(all(c("supervised", "supervised_mode") %in% names(pars))) {
-          if(pars$supervised | pars$supervised_mode=="clinical") {
-            clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
-          }
-          if(pars$supervised_mode=="clinical") {
-            block_list[["clinical"]] = clinicals
-          }
+      # && is necessary here to get lazy evaluation
+      if ("supervised_mode" %in% names(pars) &&
+        pars$supervised_mode=="clinical") {
+        if (!pars$clinical_fav)
+            stop("clinical supervision should only be used with clinfav")
+        block_list[["clinical"]] = clinicals
       }
 
       JDR = private$train_jdr(block_list, ysurv, pars)
