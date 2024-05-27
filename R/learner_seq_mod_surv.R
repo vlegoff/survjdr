@@ -70,10 +70,17 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       )
       names(block_list) <- pars$blocks
 
+      if(pars$clinical | pars$supervised_mode=="clinical") {
+        clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
+      }
+      
+      if(pars$supervised_mode=="clinical") {
+        block_list[["clinical"]] = clinicals
+      }
+
       JDR = private$train_jdr(block_list, ysurv, pars)
 
       if (pars$clinical_fav) { # adding clinical data if necessary
-        clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
         JDR$x = cbind(JDR$x, clinicals)
       }
 
@@ -285,6 +292,7 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
 
       if (!is.null(pars$cv_save_path)) {
         to_save = list(
+          learner_id = self$id,
           task_id = task$id,
           fold = task$row_ids,
           lambdas = self$model$glmnet$lambda,

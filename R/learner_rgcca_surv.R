@@ -50,11 +50,19 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
                 colnames(complete_matrix) = pars$blocks
             }
 
-            tau = rep(pars$tau, length(x))
+            tau = rep(pars$tau, length(pars$blocks))
             if (pars$supervised) tau = c(tau, 0)
 
+            if(pars$supervised & pars$supervised_mode=="clinical") {
+                response = length(x)
+            } else if (pars$supervised) { # supervised_mode = null
+                response = length(x) + 1
+            } else {
+                response = NULL
+            }
+
             private$rgcca_args = list(
-                response=if(pars$supervised) length(x) + 1,
+                response=response,
                 connection=if(!pars$supervised) complete_matrix,
                 tau=tau,
                 ncomp=pars$ncomp,
@@ -71,9 +79,8 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
               null_mod = survival::coxph(y~1)
               x[["residuals"]] = residuals(null_mod, type="deviance")
             } else if (pars$supervised_mode=="clinical") {
-              clin_x = x[,grepl("clinical", colnames(x))]
-              print(colnames(clin_x))
-              clin_mod = survival::coxph(y~clin_x)
+              clin_mod = survival::coxph(y~x[["clinical"]])
+              x = x[pars$blocks]
               x[["residuals"]] = residuals(clin_mod, type="deviance")
             }
         }
@@ -95,6 +102,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
     },
 
     predict_jdr = function(newx, jdr, pars) {
+        newx = newx[pars$blocks]
         if(pars$supervised) {
             newx[["residuals"]] = as.matrix(rep(1, nrow(newx[[1]])))
             colnames(newx[["residuals"]]) = "residuals"
