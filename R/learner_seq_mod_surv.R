@@ -70,12 +70,14 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       )
       names(block_list) <- pars$blocks
 
-      if(pars$clinical | pars$supervised_mode=="clinical") {
-        clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
-      }
-      
-      if(pars$supervised_mode=="clinical") {
-        block_list[["clinical"]] = clinicals
+      # special block for supervising RGCCA with residuals of clinical model
+      if(all(c("supervised", "supervised_mode") %in% names(pars))) {
+          if(pars$supervised | pars$supervised_mode=="clinical") {
+            clinicals = as.matrix(x[, .SD, .SDcols=names(x) %like% "_clinical$"])
+          }
+          if(pars$supervised_mode=="clinical") {
+            block_list[["clinical"]] = clinicals
+          }
       }
 
       JDR = private$train_jdr(block_list, ysurv, pars)
@@ -210,7 +212,8 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
           fit = predict(glmnet_train, newx=JDR_test$x)
           res = apply(fit, 2,
             function(lp) survAUC::AUC.uno(ytrain, ytest, lp,
-                                          times=max(ytrain[,"time"])))
+                                          times=sort(ytrain[,"time"])))
+          res = sapply(res, `[[`, "iauc")
           results[i, ] = res
         }
       }
