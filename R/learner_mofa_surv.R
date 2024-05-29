@@ -8,6 +8,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
       param_set = ps(
         blocks=p_uty(tags=c("train", "predict")),
         clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
+        hvg=p_dbl(0, 1, default=1, tags=c("train", "predict")),
         scale_views=p_lgl(default=TRUE, tags=c("train")),
         likelihoods=p_uty(default=NULL, tags=c("train")),
         num_factors=p_int(1L, 100L, default=15L, tags=c("train")),
@@ -52,6 +53,17 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
     train_opts = NULL,
 
     train_jdr = function(x, y, pars) {
+
+        if(pars$hvg<1) {
+            vars = lapply(x, function(xi) apply(xi, 2, var))
+            vars = lapply(vars, sort, decreasing=TRUE)
+            cols = lapply(vars, function(vari)
+                names(vari[1:ceiling(pars$hvg*length(vari))]))
+            n = names(x)
+            x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
+            names(x) = n
+            x = lapply(x, as.matrix)
+        } else cols = NULL
 
         x = lapply(x, t) # why oh god why
 
@@ -130,20 +142,29 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         outfile = file.path(tempdir(), "mofa_model.hdf5")
         MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
             use_basilisk=TRUE)
+        print("finished training")
         #MOFAobject_trained = MOFA2::run_mofa(MOFAobject, use_basilisk=TRUE)
 
         latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
         #print(latent_space)
+        print("juste before return")
 
-        return(list(x=latent_space, jdr=MOFAobject_trained))
+        return(list(x=latent_space, jdr=list(mofa=MOFAobject_trained,
+            cols=cols)))
     },
 
     predict_jdr = function(newx, jdr, pars) {
+        print("predict")
+        
+        if(pars$hvg<1) {
+            newx = lapply(names(newx),
+                          function(n) newx[[n]][,jdr$cols[[n]]])
+        }
         #newx = lapply(newx, t)
         newx = Reduce(cbind, newx)
 
         #print(lapply(jdr@expectations$W, dim))
-        W = Reduce(cbind, lapply(jdr@expectations$W, t))
+        W = Reduce(cbind, lapply(jdr$mofa@expectations$W, t))
         #W = Reduce(rbind, jdr@expectations$W)
         #print(dim(newx))
         #print(dim(W))
@@ -154,6 +175,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         Z2_new = newx %*% MASS::ginv(W) # fastest way
         #print(dim(Z2_new))
         #print(Z_new - Z2_new)
+        print(Z2_new)
 
         return(list(x=Z2_new))
     }
