@@ -35,19 +35,11 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
   private = list(
 
     nmf_args = NULL,
-    mins = NULL,
-    cols = NULL,
-
     train_jdr = function(x, y, pars) {
-
-        if(is.null(pars$weights)) weights=rep(1, length(pars$blocks))
-        else if (length(blocks)==length(pars$weights)) weights=pars$weights
-        else stop("weights and blocks should have the same length")
 
         if(is.null(private$nmf_args)) {
             private$nmf_args = list(
               k=pars$k,
-              wt=weights,
               maxiter=200,
               st.count=20,
               n.ini=30,
@@ -56,31 +48,51 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
             )
         }
 
-        if(is.null(private$mins)) {
-            private$mins = sapply(x, min)
-            private$mins = abs(private$mins)*(private$mins<0)
-        }
-
-        #Make the matrices non negative
+        #Min-Max normalization, cantini style
         n = names(x)
-        x = lapply(seq_along(x), function(i) x[[i]] + private$mins[i])
+
+        mins = sapply(x, min)
+        mins = abs(mins)*(mins<0)
+        x = lapply(seq_along(x), function(i) x[[i]] + mins[i])
+
+        maxs = sapply(x, max)
+        x = lapply(seq_along(x), function(i) x[[i]] / maxs[i])
+
         names(x) = n
+
         #Remove bad columns
-        #private$cols = lapply(x, function(xi) apply(xi, 2, var)!=0)
         cols = lapply(x, function(xi) apply(xi, 2, var)!=0)
         x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
+
+        # computing weights
+        if(is.null(pars$weights)) weights=rep(1, length(pars$blocks))
+        else if(pars$weights=="frob") { 
+            norms=sapply(x, norm, type="F")
+            weights=max(norms)/norms
+        } else if(pars$weights=="frob_p") {
+            p=sapply(x, ncol)
+            norms=sapply(x, norm, type="F")
+            norms=norms/p
+            weights=max(norms)/norms
+        }
+        else if(length(blocks)==length(pars$weights)) weights=pars$weights
+        else stop("weights and blocks should have the same length")
+        # updating weights for each inner fold
+        private$nmf_args$wt = weights
 
         nmf_fit = mlr3misc::invoke(IntNMF::nmf.mnnals,
           .args=c(list(dat=x), private$nmf_args))
 
-        return(list(x=nmf_fit$W, jdr=list(fit=nmf_fit$H, cols=cols)))
+        return(list(x=nmf_fit$W, jdr=list(fit=nmf_fit$H, cols=cols,
+            mins=mins, maxs=maxs)))
     },
 
     predict_jdr = function(newx, jdr, pars) {
         newx = lapply(names(newx),
                       function(n) newx[[n]][,jdr$cols[[n]]])
         n = names(newx)
-        newx = lapply(seq_along(newx), function(i) newx[[i]] + private$mins[i])
+        newx = lapply(seq_along(newx), function(i) newx[[i]] + jdr$mins[i])
+        newx = lapply(seq_along(newx), function(i) newx[[i]] / jdr$maxs[i])
         names(newx) = n
 
         latent_space = IntNMF:::W.fcnnls(x=jdr$fit, y=newx,
