@@ -77,13 +77,11 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         }
         else if(length(blocks)==length(pars$weights)) weights=pars$weights
         else stop("weights and blocks should have the same length")
-        # updating weights for each inner fold
-        private$nmf_args$wt = weights
 
         nmf_fit = mlr3misc::invoke(IntNMF::nmf.mnnals,
-          .args=c(list(dat=x), private$nmf_args))
+          .args=c(list(dat=x, wt=weights), private$nmf_args))
 
-        return(list(x=nmf_fit$W, jdr=list(fit=nmf_fit$H, cols=cols,
+        return(list(x=nmf_fit$W, jdr=list(fit=nmf_fit$H, cols=cols, wt=weights,
             mins=mins, maxs=maxs)))
     },
 
@@ -95,8 +93,7 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         newx = lapply(seq_along(newx), function(i) newx[[i]] / jdr$maxs[i])
         names(newx) = n
 
-        latent_space = IntNMF:::W.fcnnls(x=jdr$fit, y=newx,
-                                          weight=private$nmf_args$wt)
+        latent_space = IntNMF:::W.fcnnls(x=jdr$fit, y=newx, weight=jdr$wt)
         latent_space = t(latent_space$coef)
         return(list(x=latent_space))
     }
