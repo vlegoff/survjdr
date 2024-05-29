@@ -67,11 +67,11 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         # computing weights
         if(is.null(pars$weights)) weights=rep(1, length(pars$blocks))
         else if(pars$weights=="frob") { 
-            norms=sapply(x, norm, type="F")
+            norms=sapply(x, norm, type="F")^2
             weights=max(norms)/norms
         } else if(pars$weights=="frob_p") {
             p=sapply(x, ncol)
-            norms=sapply(x, norm, type="F")
+            norms=sapply(x, norm, type="F")^2
             norms=norms/p
             weights=max(norms)/norms
         }
