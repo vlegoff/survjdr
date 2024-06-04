@@ -53,6 +53,28 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
     model_opts = NULL,
     train_opts = NULL,
 
+    # copied from MOFA2 R package
+    .infer_likelihoods <- function(x) {
+      
+      # Gaussian by default
+      likelihood <- rep(x="gaussian", times=length(x))
+      names(likelihood) <- names(x)
+      
+      for (m in names(x)) {
+        data <- x[[n]]
+        
+        # bernoulli
+        if (length(unique(data[!is.na(data)]))==2) {
+          likelihood[m] <- "bernoulli"
+        # poisson
+        } else if (all(data[!is.na(data)]%%1==0)) {
+          likelihood[m] <- "poisson"
+        }
+      }
+      
+      return(likelihood)
+    }
+
     train_jdr = function(x, y, pars) {
 
         if(pars$hvg<1) {
@@ -66,8 +88,30 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             #x = lapply(x, as.matrix)
         } else cols = NULL
 
+        likelihoods = pars$likelihoods
+        if(is.null(likelihoods)) {
+            likelihoods = private$.infer_likelihoods(x)
+        }
+
+        means = vector("list", length(x))
+        names(means) = names(x)
+        norms = vector("numeric", length(x))
+        names(norms) = names(x)
+        for(n in names(x)) {
+            means[[n]] = colMeans(x[[n]])
+            if(likelihoods[n]=="gaussian" & pars$center) {
+                x[[n]] =  x[[n]] - matrix(means[[n]],
+                    ncol=length(means[[n]]),
+                    nrow=nrow(x[[n]]),
+                    byrow=TRUE)
+            }
+            norms[n] = norm(x[[n]], type="F") / sqrt(ncol(x[[n]])*nrow(x[[n]]))
+            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+                x[[n]] =  x[[n]] / norms[n]
+            }
+        }
+
         MOFAobject = MOFA2::create_mofa(lapply(x, t))
-        print(MOFAobject)
 
         if(is.null(private$data_opts)) {
             private$data_opts = list(
@@ -89,7 +133,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         }
         if(is.null(private$model_opts)) {
             private$model_opts = list(
-                likelihoods=pars$likelihoods,
+                likelihoods=likelihoods,
                 num_factors=pars$num_factors,
                 spikeslab_factors=pars$spikeslab_factors,
                 spikeslab_weights=pars$spikeslab_weights,
@@ -141,44 +185,12 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             training_options=private$train_opts
         )
 
-        # dirty workaround to only center and gaussian data
-        #likelihoods = MOFAobject@model_options$likelihoods
-        likelihoods = private$model_opts$likelihoods
-        print(likelihoods)
-        means = vector("list", length(x))
-        names(means) = names(x)
-        norms = vector("numeric", length(x))
-        names(norms) = names(x)
-        for(n in names(x)) {
-            means[[n]] = colMeans(x[[n]])
-            if(likelihoods[n]=="gaussian" & pars$center) {
-                x[[n]] =  x[[n]] - matrix(means[[n]],
-                    ncol=length(means[[n]]),
-                    nrow=nrow(x[[n]]),
-                    byrow=TRUE)
-            }
-            norms[n] = norm(x[[n]], type="F") / sqrt(ncol(x[[n]])*nrow(x[[n]]))
-            if(likelihoods[n]=="gaussian" & pars$scale_view) {
-                x[[n]] =  x[[n]] / norms[n]
-            }
-        }
-        print(lapply(x, colMeans))
-        print(sapply(x, norm, type="F"))
-        MOFAobject = MOFA2::create_mofa(lapply(x, t))
-        MOFAobject = MOFA2::prepare_mofa(
-            object=MOFAobject,
-            data_options=private$data_opts,
-            model_options=private$model_opts,
-            training_options=private$train_opts
-        )
-
         # Manage temp file used for training...
 
         outfile = file.path(tempdir(), "mofa_model.hdf5")
         MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
             use_basilisk=TRUE)
         print("finished training")
-        #MOFAobject_trained = MOFA2::run_mofa(MOFAobject, use_basilisk=TRUE)
 
         MOFAobject_trained = MOFA2::load_model(outfile,
             sort_factors=FALSE,
