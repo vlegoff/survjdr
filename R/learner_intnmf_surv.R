@@ -16,6 +16,8 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
                            "basic", "V&VH", "linpred"), default="cindex",
                           tags=c("train")),
         cv_save_path=p_uty(default=NULL, tags=c("predict")),
+        n.ini=p_int(1L, default=30L, tags=c("train")),
+        maxiter=p_int(10L, default=200L, tags=c("train")),
         seed=p_int(0L, special_vals=list(NULL), default=NULL, tags=c("train"))
       )
       param_set$values = param_set$default
@@ -40,9 +42,9 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         if(is.null(private$nmf_args)) {
             private$nmf_args = list(
               k=pars$k,
-              maxiter=200,
+              maxiter=pars$maxiter,
               st.count=20,
-              n.ini=30,
+              n.ini=pars$n.ini,
               ini.nndsvd=FALSE,
               seed=TRUE
             )
