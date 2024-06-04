@@ -9,7 +9,8 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         blocks=p_uty(tags=c("train", "predict")),
         clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
         hvg=p_dbl(0, 1, default=1, tags=c("train", "predict")),
-        scale_views=p_lgl(default=TRUE, tags=c("train")),
+        center=p_lgl(default=TRUE, tags=c("train", "predict")),
+        scale_views=p_lgl(default=TRUE, tags=c("train", "predict")),
         likelihoods=p_uty(default=NULL, tags=c("train")),
         num_factors=p_int(1L, 100L, default=15L, tags=c("train")),
         spikeslab_factors=p_lgl(default=FALSE, tags=c("train")),
@@ -62,19 +63,17 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             n = names(x)
             x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
             names(x) = n
-            x = lapply(x, as.matrix)
+            #x = lapply(x, as.matrix)
         } else cols = NULL
 
-        x = lapply(x, t) # why oh god why
-
-        MOFAobject = MOFA2::create_mofa(x)
+        MOFAobject = MOFA2::create_mofa(lapply(x, t))
         print(MOFAobject)
 
         if(is.null(private$data_opts)) {
             private$data_opts = list(
-              scale_views=pars$scale_views,
+              scale_views=FALSE,
               scale_groups=FALSE,
-              center_groups=TRUE,
+              center_groups=FALSE,
               use_float32=FALSE,
               views=pars$blocks
             )
@@ -97,6 +96,10 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
                 ard_factors=pars$ard_factors,
                 ard_weights=pars$ard_weights
             )
+            # Just for the likelihoods trick to work later
+            private$model_opts = private$model_opts[
+                !sapply(private$model_opts, is.null)
+            ]
             default_options = MOFA2::get_default_model_options(MOFAobject)
             private$model_opts = c(
                 private$model_opts,
@@ -105,6 +108,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
                 ]
             )
             private$model_opts = private$model_opts[names(default_options)]
+            print(private$model_opts)
         }
         if(is.null(private$train_opts)) {
             private$train_opts = list(
@@ -137,6 +141,37 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             training_options=private$train_opts
         )
 
+        # dirty workaround to only center and gaussian data
+        #likelihoods = MOFAobject@model_options$likelihoods
+        likelihoods = private$model_opts$likelihoods
+        print(likelihoods)
+        means = vector("list", length(x))
+        names(means) = names(x)
+        norms = vector("numeric", length(x))
+        names(norms) = names(x)
+        for(n in names(x)) {
+            means[[n]] = colMeans(x[[n]])
+            if(likelihoods[n]=="gaussian" & pars$center) {
+                x[[n]] =  x[[n]] - matrix(means[[n]],
+                    ncol=length(means[[n]]),
+                    nrow=nrow(x[[n]]),
+                    byrow=TRUE)
+            }
+            norms[n] = norm(x[[n]], type="F") / sqrt(ncol(x[[n]])*nrow(x[[n]]))
+            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+                x[[n]] =  x[[n]] / norms[n]
+            }
+        }
+        print(lapply(x, colMeans))
+        print(sapply(x, norm, type="F"))
+        MOFAobject = MOFA2::create_mofa(lapply(x, t))
+        MOFAobject = MOFA2::prepare_mofa(
+            object=MOFAobject,
+            data_options=private$data_opts,
+            model_options=private$model_opts,
+            training_options=private$train_opts
+        )
+
         # Manage temp file used for training...
 
         outfile = file.path(tempdir(), "mofa_model.hdf5")
@@ -145,12 +180,17 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         print("finished training")
         #MOFAobject_trained = MOFA2::run_mofa(MOFAobject, use_basilisk=TRUE)
 
+        MOFAobject_trained = MOFA2::load_model(outfile,
+            sort_factors=FALSE,
+            load_data=FALSE,
+            remove_inactive_factors=FALSE)
         latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
+        print(latent_space)
         #print(latent_space)
         print("juste before return")
 
         return(list(x=latent_space, jdr=list(mofa=MOFAobject_trained,
-            cols=cols)))
+            cols=cols, means=means, norms=norms)))
     },
 
     predict_jdr = function(newx, jdr, pars) {
@@ -160,7 +200,22 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             newx = lapply(names(newx),
                           function(n) newx[[n]][,jdr$cols[[n]]])
         }
+
+        likelihoods = jdr$mofa@model_options$likelihoods
+        for(n in names(newx)) {
+            if(likelihoods[n]=="gaussian" & pars$center) {
+                newx[[n]] =  newx[[n]] - matrix(jdr$means[[n]],
+                    ncol=length(jdr$means[[n]]),
+                    nrow=nrow(newx[[n]]),
+                    byrow=TRUE)
+            }
+            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+                newx[[n]] =  newx[[n]] / norms[n]
+            }
+        }
+
         #newx = lapply(newx, t)
+
         newx = Reduce(cbind, newx)
 
         #print(lapply(jdr@expectations$W, dim))
