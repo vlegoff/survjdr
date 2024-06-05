@@ -54,14 +54,14 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
     train_opts = NULL,
 
     # copied from MOFA2 R package
-    .infer_likelihoods <- function(x) {
+    .infer_likelihoods = function(x) {
       
       # Gaussian by default
       likelihood <- rep(x="gaussian", times=length(x))
       names(likelihood) <- names(x)
       
       for (m in names(x)) {
-        data <- x[[n]]
+        data <- x[[m]]
         
         # bernoulli
         if (length(unique(data[!is.na(data)]))==2) {
@@ -73,7 +73,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
       }
       
       return(likelihood)
-    }
+    },
 
     train_jdr = function(x, y, pars) {
 
@@ -152,7 +152,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
                 ]
             )
             private$model_opts = private$model_opts[names(default_options)]
-            print(private$model_opts)
         }
         if(is.null(private$train_opts)) {
             private$train_opts = list(
@@ -174,10 +173,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             private$train_opts = private$train_opts[names(default_options)]
         }
 
-        #print(MOFA2::get_default_data_options(MOFAobject))
-        #print("***********")
-        #print(private$data_opts)
-
         MOFAobject = MOFA2::prepare_mofa(
             object=MOFAobject,
             data_options=private$data_opts,
@@ -186,27 +181,22 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         )
 
         # Manage temp file used for training...
-
-        outfile = file.path(tempdir(), "mofa_model.hdf5")
+        outfile = tempfile(patter="mofa_model_", fileext=".hdf5")
+        print(outfile)
         MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
             use_basilisk=TRUE)
-        print("finished training")
 
         MOFAobject_trained = MOFA2::load_model(outfile,
             sort_factors=FALSE,
             load_data=FALSE,
             remove_inactive_factors=FALSE)
         latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
-        print(latent_space)
-        #print(latent_space)
-        print("juste before return")
 
         return(list(x=latent_space, jdr=list(mofa=MOFAobject_trained,
             cols=cols, means=means, norms=norms)))
     },
 
     predict_jdr = function(newx, jdr, pars) {
-        print("predict")
         
         if(pars$hvg<1) {
             newx = lapply(names(newx),
@@ -229,22 +219,10 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         #newx = lapply(newx, t)
 
         newx = Reduce(cbind, newx)
-
-        #print(lapply(jdr@expectations$W, dim))
         W = Reduce(cbind, lapply(jdr$mofa@expectations$W, t))
-        #W = Reduce(rbind, jdr@expectations$W)
-        #print(dim(newx))
-        #print(dim(W))
-        #lm1 = lm(t(newx) ~ t(W) - 1)
-        #print(coef(lm1))
-        #Z_new = t(as.matrix(coef(lm1)))
-        #Z2_new = newx %*% t(W) %*% MASS::ginv(W %*% t(W)) 
-        Z2_new = newx %*% MASS::ginv(W) # fastest way
-        #print(dim(Z2_new))
-        #print(Z_new - Z2_new)
-        print(Z2_new)
+        Z_new = newx %*% MASS::ginv(W) # fastest way
 
-        return(list(x=Z2_new))
+        return(list(x=Z_new))
     }
 
   )
