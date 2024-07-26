@@ -182,7 +182,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
 
         # Manage temp file used for training...
         outfile = tempfile(patter="mofa_model_", fileext=".hdf5")
-        print(outfile)
         MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
             use_basilisk=TRUE)
 
@@ -199,8 +198,10 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
     predict_jdr = function(newx, jdr, pars) {
         
         if(pars$hvg<1) {
+            n = names(newx)
             newx = lapply(names(newx),
                           function(n) newx[[n]][,jdr$cols[[n]]])
+            names(newx) = n
         }
 
         likelihoods = jdr$mofa@model_options$likelihoods
@@ -212,7 +213,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
                     byrow=TRUE)
             }
             if(likelihoods[n]=="gaussian" & pars$scale_view) {
-                newx[[n]] =  newx[[n]] / norms[n]
+                newx[[n]] =  newx[[n]] / jdr$norms[n]
             }
         }
 
