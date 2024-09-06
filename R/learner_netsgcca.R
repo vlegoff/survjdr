@@ -1,0 +1,128 @@
+#' @export
+LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
+  inherit = LearnerSeqMod,
+  public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    initialize = function() {
+      param_set = ps(
+        blocks=p_uty(tags=c("train", "predict")),
+        graph_laplacians=p_uty(tags=c("train")),
+        sparsity=p_dbl(0, 1, default=1, tags=c("train")),
+        lambda=p_dbl(0, 1, default=1, tags=c("train")),
+        clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
+        supervised=p_lgl(default=FALSE, tags=c("train", "predict")),
+        supervised_mode=p_fct(c("null", "clinical"), default="null", tags=c("train")),
+        ncomp=p_int(1L, default=1L, tags=c("train")),
+        scheme=p_fct(c("horst", "factorial", "centroid"), default="factorial",
+                      tags=c("train")),
+        nfolds=p_int(1L, default=10L, tags=c("train")),
+        nlambdas=p_int(10L, 1000L, default=100L, tags=c("train")),
+        CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
+                           "basic", "V&VH", "linpred"), default="cindex",
+                          tags=c("train")),
+        cv_save_path=p_uty(default=NULL, tags=c("predict")),
+        seed=p_int(0L, special_vals=list(NULL), default=NULL, tags=c("train"))
+      )
+      param_set$values = param_set$default
+
+      super$initialize(
+        id = "surv.rgcca",
+        packages = c("RGCCA", "mlr3misc"),
+        feature_types = c("integer", "numeric", "factor"),
+        predict_types = c("crank", "lp", "distr"),
+        param_set = param_set,
+        properties = c(),
+        man = "",
+        label = ""
+      )
+    }
+  ),
+  private = list(
+
+    rgcca_args = NULL,
+
+    train_jdr = function(x, y, pars) {
+        if(is.null(private$rgcca_args)) {
+            if(!pars$supervised) {
+                complete_matrix = matrix(1, length(pars$blocks),
+                                       length(pars$blocks))
+                diag(complete_matrix) = 0
+                rownames(complete_matrix) = pars$blocks
+                colnames(complete_matrix) = pars$blocks
+            }
+
+            tau = rep(pars$tau, length(pars$blocks))
+            if (pars$supervised) tau = c(tau, 0)
+
+            if(pars$supervised & pars$supervised_mode=="clinical") {
+                response = length(x)
+            } else if (pars$supervised) { # supervised_mode = null
+                response = length(x) + 1
+            } else {
+                response = NULL
+            }
+
+            private$rgcca_args = list(
+                response=response,
+                connection=if(!pars$supervised) complete_matrix,
+                sparsity=sparsity,
+                lambda=lambda,
+                graph_laplacians=graph_laplacians,
+                ncomp=pars$ncomp,
+                scheme=pars$scheme,
+                method="rgcca",
+                #scale=TRUE, not present for netSGCCA?
+                #scale_block="inertia",
+                verbose=F
+            )
+        }
+
+        if(pars$supervised) {
+            if(pars$supervised_mode=="null") {
+              null_mod = survival::coxph(y~1)
+              x[["residuals"]] = residuals(null_mod, type="deviance")
+            } else if (pars$supervised_mode=="clinical") {
+              clin_mod = survival::coxph(y~x[["clinical"]])
+              x = x[pars$blocks]
+              x[["residuals"]] = residuals(clin_mod, type="deviance")
+            }
+        }
+
+        rgcca_fit = mlr3misc::invoke(RGCCA::netsgcca,
+            .args=c(list(blocks=x), private$rgcca_args))
+        comps = Reduce(cbind,
+            rgcca_fit$Y[names(rgcca_fit$Y)!="residuals"])
+        colnames(comps) = paste(
+            rep(pars$blocks, each=private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            sep="."
+        )
+        #for (b in names(rgcca_fit$blocks)) { # trick to avoid storing blocks, not working though
+            #rgcca_fit$blocks[[b]] = 1
+            #rgcca_fit$call$blocks[[b]] = 1
+        #}
+        return(list(x=comps, jdr=rgcca_fit))
+    },
+
+    predict_jdr = function(newx, jdr, pars) {
+        newx = newx[pars$blocks]
+        if(pars$supervised) {
+            newx[["residuals"]] = as.matrix(rep(1, nrow(newx[[1]])))
+            colnames(newx[["residuals"]]) = "residuals"
+        }
+        rgcca_pred = RGCCA::rgcca_transform(jdr, newx)
+        pred_space = Reduce(cbind, rgcca_pred[names(rgcca_pred)!="residuals"])
+        colnames(pred_space) = paste(
+            rep(pars$blocks, each=private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            sep="."
+        )
+        return(list(x=pred_space))
+    }
+
+  )
+)
+
+#mlr3::mlr_learners$add("surv.rgcca", LearnerSurvRGCCA)
+.extralrns_dict$add("surv.netsgcca", LearnerSurvRGCCA)
