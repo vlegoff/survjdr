@@ -56,7 +56,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
         # removing all 0 variables to avoid sjive bug
         #private$cols = lapply(x, function(xi) as.logical(rowSums(xi!=0)))
         #private$cols = lapply(x, function(xi) apply(xi, 1, var)!=0)
-        cols = lapply(x, function(xi) apply(xi, 1, var)!=0)
+        cols = lapply(x, function(xi) apply(xi, 1, stats::var)!=0)
         x = lapply(names(x), function(n) x[[n]][cols[[n]],])
 
         null_mod = survival::coxph(y~1)
@@ -64,17 +64,18 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
 
         jive_fit = mlr3misc::invoke(sup.r.jive::sJIVE,
           .args=c(list(X=x, Y=resi), private$jive_args))
+        pred = predict(jive_fit, newdata=x)
 
         latent_space = matrix(0,
           nrow=ncol(x[[1]]),
           ncol=private$jive_args$rankJ+length(x)*private$jive_args$rankA[1])
 
         if(private$jive_args$rankA[1]==0) {
-          latent_space[,1:private$jive_args$rankJ] = t(jive_fit$S_J)
+          latent_space[,1:private$jive_args$rankJ] = t(pred$Sj)
           colnames(latent_space) = paste0("common.", 1:pars$rankJ)
         } else if (private$jive_args$rankJ==0) {
           latent_space[,1:ncol(latent_space)] = 
-            t(Reduce(rbind, jive_fit$S_I)) # cbind was not working
+            t(Reduce(rbind, pred$Si)) # cbind was not working
 
           colnames(latent_space) =
               paste0(
@@ -83,10 +84,10 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
                   rep(1:pars$rankA, pars$rankA)
               )
         } else {
-          latent_space[,1:private$jive_args$rankJ] = t(jive_fit$S_J)
+          latent_space[,1:private$jive_args$rankJ] = t(pred$Sj)
           
           latent_space[,(private$jive_args$rankJ+1):ncol(latent_space)] = 
-            t(Reduce(rbind, jive_fit$S_I)) # cbind was not working
+            t(Reduce(rbind, pred$Si)) # cbind was not working
           colnames(latent_space) = c(
               paste0("common.", 1:pars$rankJ),
               paste0(
@@ -132,7 +133,6 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
                   rep(1:pars$rankA, pars$rankA)
               )
         } else {
-          print(predict$Sj)
           latent_space[,1:private$jive_args$rankJ] = t(predict$Sj)
           
           latent_space[,(private$jive_args$rankJ+1):ncol(latent_space)] = 
