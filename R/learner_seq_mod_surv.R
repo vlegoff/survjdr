@@ -90,16 +90,22 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       }
 
       # implement case where there is only 1 comp and no clinical data
-      # it corresponds to a simple coxph model, no need for CV
       if (ncol(JDR$x)==1) {
-        coxph = survival::coxph(ysurv ~ ., data=as.data.frame(JDR$x))
-        return(list(JDR=JDR$jdr, coxph=coxph))  
+        one_column_flag = TRUE
+        JDR$x = cbind(JDR$x, rep(0, nrow(JDR$x)))
+        lambdas = 0
+        glmnet_fit = glmnet::glmnet(JDR$x, ysurv, family="cox", alpha=0,
+                                    lambda=lambdas)
+      } else {
+        one_column_flag = FALSE
+        #Fit glmnet to get lambda sequence used in internal CV loop
+        glmnet_fit = glmnet::glmnet(JDR$x, ysurv, family="cox", alpha=0,
+                                    nlambda=pars$nlambdas)
+        lambdas = glmnet_fit$lambda
       }
 
-      #Fit glmnet to get lambda sequence used in internal CV loop
-      glmnet_fit = glmnet::glmnet(JDR$x, ysurv, family="cox", alpha=0,
-                                  nlambda=pars$nlambdas)
-      lambdas = glmnet_fit$lambda
+      #keeping standard deviations for later
+      standevs = apply(JDR$x, 2, sd)
 
       folds = caret::createFolds(factor(ysurv[, "status"]), k=pars$nfolds, list=TRUE)
 
@@ -121,6 +127,9 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
         if(pars$clinical_fav) {
           JDR_train$x = cbind(JDR_train$x, clinicals[-f,])
         }
+        if (one_column_flag) {
+          JDR_train$x = cbind(JDR_train$x, rep(0, nrow(JDR_train$x)))
+        }
         
         # fit glmnet on train data
         glmnet_train = glmnet::glmnet(JDR_train$x, ytrain,
@@ -136,6 +145,9 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
         JDR_test = private$predict_jdr(fold_test, JDR_train$jdr, pars)
         if(pars$clinical_fav) {
           JDR_test$x = cbind(JDR_test$x, clinicals[f,])
+        }
+        if (one_column_flag) {
+          JDR_test$x = cbind(JDR_test$x, rep(0, nrow(JDR_test$x)))
         }
 
         # Computing CV measure
@@ -243,6 +255,7 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       list(JDR=JDR$jdr,
            glmnet=glmnet_fit,
            best_lambda=best_lambda,
+           standevs=standevs,
            cv_grid=results,
            cv_results=aggr_results,
            folds=folds,
@@ -274,14 +287,15 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
 
       # if there is only one comp
       if (ncol(JDR_new$x)==1) {
-        fit = survival::survfit(self$model$coxph,
-                                newdata=as.data.frame(JDR_new$x),
-                                se.fit=FALSE)
-        lp = predict(self$model$coxph,
-                       newdata=as.data.frame(JDR_new$x))
-        return(mlr3proba::.surv_return(times=fit$time,
-                                       surv=t(fit$surv),
-                                       lp=lp))
+        #fit = survival::survfit(self$model$coxph,
+        #                        newdata=as.data.frame(JDR_new$x),
+        #                        se.fit=FALSE)
+        #lp = predict(self$model$coxph,
+        #               newdata=as.data.frame(JDR_new$x))
+        #return(mlr3proba::.surv_return(times=fit$time,
+        #                               surv=t(fit$surv),
+        #                               lp=lp))
+        JDR_new$x = cbind(JDR_new$x, rep(0, nrow(JDR_new$x)))
       }
       
       # Calculate predictions for the selected predict type.
@@ -296,6 +310,10 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
                    newx=JDR_new$x,
                    s=self$model$best_lambda)
 
+      # getting coefficients
+      beta = coef(self$model$glmnet, s=self$model$best_lambda)[,1]
+      stanbeta = self$model$standevs * beta
+
       if (!is.null(pars$cv_save_path)) {
         to_save = list(
           learner_id = self$id,
@@ -304,7 +322,10 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
           lambdas = self$model$glmnet$lambda,
           best_lambda = self$model$best_lambda,
           cv_grid = self$model$cv_grid,
-          cv_results = self$model$cv_results
+          cv_results = self$model$cv_results,
+          beta=beta,
+          standevs = self$model$standevs,
+          stanbeta=stanbeta
         )
         saveRDS(to_save, file=paste0(pars$cv_save_path, "/",
           rlang::hash(to_save), ".rds"))
