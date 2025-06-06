@@ -63,7 +63,7 @@ LearnerSurvNMF = R6::R6Class("LearnerSurvNMF",
         names(x) = n
 
         #Remove bad columns
-        cols = lapply(x, function(xi) apply(xi, 2, var)!=0)
+        cols = lapply(x, function(xi) apply(xi, 2, stats::var)!=0)
         x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
 
         # computing weights
