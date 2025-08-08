@@ -7,6 +7,8 @@ Authors@R:
 Description: What the package does (one paragraph).
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
+Depends:
+    data.table
 Imports:
     mlr3,
     mlr3proba,
@@ -16,7 +18,6 @@ Imports:
     glmnet,
     caret,
     checkmate,
-    data.table,
     methods,
     paradox,
     R6
