@@ -24,7 +24,7 @@ LearnerSurvSGCCA = R6::R6Class("LearnerSurvSGCCA",
       param_set$values = param_set$default
 
       super$initialize(
-        id = "surv.rgcca",
+        id = "surv.sgcca",
         packages = c("RGCCA", "mlr3misc"),
         feature_types = c("integer", "numeric", "factor"),
         predict_types = c("crank", "lp", "distr"),

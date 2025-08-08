@@ -66,14 +66,14 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
             private$rgcca_args = list(
                 response=response,
                 connection=if(!pars$supervised) complete_matrix,
-                sparsity=sparsity,
-                lambda=lambda,
-                graph_laplacians=graph_laplacians,
+                sparsity=pars$sparsity,
+                lambda=pars$lambda,
+                graph_laplacians=pars$graph_laplacians,
                 ncomp=pars$ncomp,
                 scheme=pars$scheme,
                 method="rgcca",
-                #scale=TRUE, not present for netSGCCA?
-                #scale_block="inertia",
+                scale=TRUE,
+                scale_block="inertia",
                 verbose=F
             )
         }
@@ -89,7 +89,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
             }
         }
 
-        rgcca_fit = mlr3misc::invoke(RGCCA::netsgcca,
+        rgcca_fit = mlr3misc::invoke(RGCCA::rgcca,
             .args=c(list(blocks=x), private$rgcca_args))
         comps = Reduce(cbind,
             rgcca_fit$Y[names(rgcca_fit$Y)!="residuals"])
