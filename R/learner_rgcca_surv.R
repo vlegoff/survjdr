@@ -14,6 +14,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
         ncomp=p_int(1L, default=1L, tags=c("train")),
         scheme=p_fct(c("horst", "factorial", "centroid"), default="factorial",
                       tags=c("train")),
+        init=p_fct(c("svd", "random"), default="svd", tags=c("train")),
         nfolds=p_int(1L, default=10L, tags=c("train")),
         nlambdas=p_int(10L, 1000L, default=100L, tags=c("train")),
         CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
@@ -67,6 +68,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
                 tau=tau,
                 ncomp=pars$ncomp,
                 scheme=pars$scheme,
+                init=pars$init,
                 method="rgcca",
                 scale=TRUE,
                 scale_block="inertia",
@@ -91,7 +93,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
             rgcca_fit$Y[names(rgcca_fit$Y)!="residuals"])
         colnames(comps) = paste(
             rep(pars$blocks, each=private$rgcca_args$ncomp),
-            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, length(pars$blocks)),
             sep="."
         )
         #for (b in names(rgcca_fit$blocks)) { # trick to avoid storing blocks, not working though
@@ -111,7 +113,7 @@ LearnerSurvRGCCA = R6::R6Class("LearnerSurvRGCCA",
         pred_space = Reduce(cbind, rgcca_pred[names(rgcca_pred)!="residuals"])
         colnames(pred_space) = paste(
             rep(pars$blocks, each=private$rgcca_args$ncomp),
-            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, length(pars$blocks)),
             sep="."
         )
         return(list(x=pred_space))
