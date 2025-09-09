@@ -55,6 +55,7 @@ LearnertFOBI = R6::R6Class("LearnertFOBI",
                                tensor_mean <- attr(x_centered, "location")
                                
                                # Centrage et normalisation gène par gène
+                               gene_means   <- apply(x_centered, 1, mean)
                                gene_sds   <- apply(x_centered, 1, sd)
                               
                                x_centered <- sweep(x_centered, 1, gene_means, "-")
@@ -125,3 +126,5 @@ LearnertFOBI = R6::R6Class("LearnertFOBI",
                                return (list(x=latent))
                              }
                            ))
+
+.extralrns_dict$add("surv.tFOBI", LearnertFOBI)
