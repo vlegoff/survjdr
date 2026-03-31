@@ -12,19 +12,25 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         center=p_lgl(default=TRUE, tags=c("train", "predict")),
         scale_views=p_lgl(default=TRUE, tags=c("train", "predict")),
         likelihoods=p_uty(default=NULL, tags=c("train")),
-        num_factors=p_int(1L, 100L, default=15L, tags=c("train")),
+        num_factors=p_int(1L, 100L, default=15L, tags=c("train", "predict")),
         spikeslab_factors=p_lgl(default=FALSE, tags=c("train")),
         spikeslab_weights=p_lgl(default=TRUE, tags=c("train")),
         ard_factors=p_lgl(default=FALSE, tags=c("train")),
         ard_weights=p_lgl(default=TRUE, tags=c("train")),
-        maxiter=p_int(1L, default=1000L, tags=c("train")),
+        iter=p_int(1L, default=1000L, tags=c("train")),
         convergence_mode=p_fct(c("fast", "medium", "slow"),
                                default="fast", tags=c("train")),
-        startELBO=p_int(default=1L, tags=c("train")),
-        freqELBO=p_int(default=1L, tags=c("train")),
+        startELBO=p_int(default=1L, tags=c("train", "predict")),
+        freqELBO=p_int(default=1L, tags=c("train", "predict")),
         gpu_mode=p_lgl(default=FALSE, tags=c("train")),
         stochastic=p_lgl(default=FALSE, tags=c("train")),
+        MaxIterations=p_int(1L, Inf, default=10000L, tags=c("train", "predict")),
+        MinIterations=p_int(1L, Inf, default=2L, tags=c("train", "predict")), 
+        ConvergenceIts=p_int(1L, Inf, default=2L, tags=c("train", "predict")),
+        ConvergenceTH=p_dbl(0, 1, default = 0.0005, tags=c("train", "predict")),
+        CenterTrg=p_lgl(default=FALSE, tags=c("train", "predict")),
         verbose=p_lgl(default=FALSE, tags=c("train")),
+        quiet=p_lgl(default=FALSE, tags=c("train")),
         nfolds=p_int(1L, default=10L, tags=c("train")),
         nlambdas=p_int(10L, 1000L, default=100L, tags=c("train")),
         CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
@@ -37,7 +43,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
 
       super$initialize(
         id = "surv.mofa",
-        packages = c("MOFA2", "mlr3misc"),
+        packages = c("MOFA2", "mlr3misc", "reticulate"),
         feature_types = c("integer", "numeric", "factor"),
         predict_types = c("crank", "lp", "distr"),
         param_set = param_set,
@@ -52,6 +58,7 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
     data_opts = NULL,
     model_opts = NULL,
     train_opts = NULL,
+    mofapy = NULL,
 
     # copied from MOFA2 R package
     .infer_likelihoods = function(x) {
@@ -75,18 +82,122 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
       return(likelihood)
     },
 
+    # Bernoulli intercept for one block
+    .bernoulli_intercept_block = function(x, Z, W) {
+        means = colMeans(x, na.rm=TRUE)
+        intercept_naive = log(means/(1-means))
+        ZW = Z %*% t(W)
+        #intercept = sapply(
+            #1:ncol(ZW),
+            #\(d) private$.bernoulli_intercept_variable(x[,d], ZW[,d], intercept_naive[d])
+        #)
+        intercept = Reduce(rbind, lapply(
+            1:ncol(ZW),
+            \(d) private$.bernoulli_intercept_variable(x[,d], ZW[,d], intercept_naive[d])
+        ))
+        #names(intercept) = colnames(x)
+        rownames(intercept) = colnames(x)
+        return(intercept)
+    },
+
+    .bernoulli_intercept_variable = function(x, zw, start) {
+        loglik = function(beta0) {
+            ll = dbinom(x, size=1, prob=plogis(zw + beta0))
+            return(-sum(log(ll[ll!=0])))
+        }
+        #print(start)
+        intercept = tryCatch({
+            #fit = stats4::mle(private$.bernoulli_loglik,
+                #start=list(beta0=start),
+                #fixed=list(zw=zw, x=x, fixed_test=5))@coef[1]
+            fit = stats4::mle(loglik, start=list(beta0=start))@coef[1]
+            if (!is.finite(fit)) stop()
+            return(data.frame(intercept=fit, method="MLE"))
+            #return(intercept_fit)
+        }, error=\(e) {
+            return(data.frame(intercept=start, method="naive"))
+            #return(start)
+        })
+        #if (is.infinite(intercept$intercept)) {
+            #print(x)
+        #}
+        return(intercept)
+    },
+
+    # not working for now, due to the behaviour of stats4::mle "fixed" argument
+    .bernoulli_loglik = function(beta0, zw, x) {
+        prob = plogis(zw + beta0)
+        ll = dbinom(x, size=1, prob=prob)
+        -sum(log(dens[dens!=0]))
+    },
+
+    .compute_intercepts = function(x, likelihoods, Z, W, pars) {
+        intercept = list()
+
+        for (b in names(x)) {
+            if(likelihoods[[b]]=="gaussian") {
+                if (pars$center) {
+                    intercept[[b]] = rep(0, ncol(x[[b]]))
+                    names(intercept[[b]]) = colnames(x[[b]])
+                } else {
+                    intercept[[b]] = colMeans(x[[b]])
+                }
+            } else if (likelihoods[[b]]=="bernoulli") {
+                intercept[[b]] = private$.bernoulli_intercept_block(x[[b]], Z, W[[b]])
+                #print(intercept[[b]])
+                #means = colMeans(x[[b]], na.rm=TRUE)
+                #intercept_naive = log(means/(1-means))
+                #ZW = Z %*% t(W[[b]])
+                #intercept[[b]] = Reduce(rbind, lapply(1:ncol(ZW),
+                #    \(col) {
+                #        loglik = function(beta0) {
+                #            plog = plogis(ZW[,col] + beta0)
+                #            dens = dbinom(x[[b]][,col], size=1, plog)
+                #            -sum(log(dens[dens!=0]))
+                #        }
+                #        intercept_fit = try(stats4::mle(loglik,
+                #            start=list(beta0=intercept_naive[col]))@coef[1])
+
+                #        if (class(intercept_fit) == "try-error") {
+                #            intercept = intercept_naive[col]
+                #            intercept_method = "naive"
+                #        } else {
+                #            intercept = intercept_fit
+                #            intercept_method = "MLE"
+                #        }
+                #        
+                #        return(data.frame(intercept=intercept,
+                #                          method=intercept_method))
+                #    }
+                #))
+            } else {
+                stop(paste0("intercept for likelihood ", likelihoods[[b]],
+                    " has not been implemented"))
+            }
+        }
+
+        return(intercept)
+
+    },
+
     train_jdr = function(x, y, pars) {
 
+        n = names(x)
+        vars = lapply(x, function(xi) apply(xi, 2, var))
+        cols_nonzero = lapply(vars, \(v) names(v[v!=0]))
         if(pars$hvg<1) {
-            vars = lapply(x, function(xi) apply(xi, 2, var))
             vars = lapply(vars, sort, decreasing=TRUE)
             cols = lapply(vars, function(vari)
                 names(vari[1:ceiling(pars$hvg*length(vari))]))
-            n = names(x)
-            x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
-            names(x) = n
+            cols = mapply(function(x, y) intersect(x, y),
+                x=cols, y=cols_nonzero)
             #x = lapply(x, as.matrix)
-        } else cols = NULL
+        } else {
+            #cols = lapply(x, function(xi) apply(xi, 2, stats::var)!=0)
+            cols = cols_nonzero
+        }
+        x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
+        names(x) = n
 
         likelihoods = pars$likelihoods
         if(is.null(likelihoods)) {
@@ -99,37 +210,31 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         names(norms) = names(x)
         for(n in names(x)) {
             means[[n]] = colMeans(x[[n]])
+            print(length(means[[n]]))
             if(likelihoods[n]=="gaussian" & pars$center) {
-                x[[n]] =  x[[n]] - matrix(means[[n]],
-                    ncol=length(means[[n]]),
-                    nrow=nrow(x[[n]]),
-                    byrow=TRUE)
+                #x[[n]] =  x[[n]] - matrix(means[[n]],
+                #    ncol=length(means[[n]]),
+                #    nrow=nrow(x[[n]]),
+                #    byrow=TRUE)
+                x[[n]] = scale(x[[n]], center=means[[n]], scale=FALSE)
             }
-            norms[n] = norm(x[[n]], type="F") / sqrt(ncol(x[[n]])*nrow(x[[n]]))
-            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+            # sqrt(n*p) is needed because MOFA divides by the standard dev.
+            #norms[n] = norm(x[[n]], type="F") / sqrt(ncol(x[[n]])*nrow(x[[n]]))
+            # alternatively, sd works even if the data is not centered
+            norms[n] = sd(x[[n]])
+            if(likelihoods[n]=="gaussian" & pars$scale_views) {
                 x[[n]] =  x[[n]] / norms[n]
             }
         }
 
-        MOFAobject = MOFA2::create_mofa(lapply(x, t))
-
         if(is.null(private$data_opts)) {
             private$data_opts = list(
-              scale_views=FALSE,
+              scale_views=FALSE, # managed by hand
               scale_groups=FALSE,
               center_groups=FALSE,
               use_float32=FALSE,
               views=pars$blocks
             )
-            # Making it more robust
-            default_options = MOFA2::get_default_data_options(MOFAobject)
-            private$data_opts = c(
-                private$data_opts,
-                default_options[
-                    !names(default_options) %in% names(private$data_opts)
-                ]
-            )
-            private$data_opts = private$data_opts[names(default_options)]
         }
         if(is.null(private$model_opts)) {
             private$model_opts = list(
@@ -144,86 +249,189 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             private$model_opts = private$model_opts[
                 !sapply(private$model_opts, is.null)
             ]
-            default_options = MOFA2::get_default_model_options(MOFAobject)
-            private$model_opts = c(
-                private$model_opts,
-                default_options[
-                    !names(default_options) %in% names(private$model_opts)
-                ]
-            )
-            private$model_opts = private$model_opts[names(default_options)]
         }
         if(is.null(private$train_opts)) {
             private$train_opts = list(
-                maxiter=pars$maxiter,
+                iter=pars$iter,
                 convergence_mode=pars$convergence_mode,
                 verbose=pars$verbose,
+                quiet=pars$quiet,
                 startELBO=pars$startELBO,
                 freqELBO=pars$freqELBO,
                 gpu_mode=pars$gpu_mode,
                 stochastic=pars$stochastic
             )
-            default_options = MOFA2::get_default_training_options(MOFAobject)
-            private$train_opts = c(
-                private$train_opts,
-                default_options[
-                    !names(default_options) %in% names(private$train_opts)
-                ]
-            )
-            private$train_opts = private$train_opts[names(default_options)]
         }
 
-        MOFAobject = MOFA2::prepare_mofa(
-            object=MOFAobject,
-            data_options=private$data_opts,
-            model_options=private$model_opts,
-            training_options=private$train_opts
+        if (is.null(private$mofapy)) {
+            CONDA = Sys.getenv("CONDA_PREFIX")
+            if (CONDA != "") {
+                reticulate::use_python(file.path(CONDA, "bin/python"))
+            } # else i dont know, hope for the best
+            private$mofapy = reticulate::import("mofapy2.run.entry_point")
+            message("reticulate loaded")
+        }
+
+        ent = private$mofapy$entry_point()
+
+        ent$set_data_options(
+            scale_views=private$data_opts$scale_views,
+            scale_groups=private$data_opts$scale_groups,
+            center_groups=private$data_opts$center_groups,
+            use_float32=private$data_opts$use_float32
         )
 
+
+        message("setting data matrix")
+        samples = rownames(x[[1]])
+        if (is.null(samples)) {
+            samples = paste0("sample_", 1:nrow(x[[1]]))
+            for (n in names(x)) rownames(x[[n]]) = samples
+        }
+        ent$set_data_matrix(
+            data=lapply(x, \(bl) list(bl)),
+            likelihoods=private$model_opts$likelihoods,
+            views_names=names(x),
+            samples_names=list(samples),
+            features_names=unname(lapply(x, colnames))
+        )
+        message("data matrix set")
+
+        ent$set_model_options(
+            factors=private$model_opts$num_factors,
+            spikeslab_factors=private$model_opts$spikeslab_factors,
+            spikeslab_weights=private$model_opts$spikeslab_weights,
+            ard_factors=private$model_opts$ard_factors,
+            ard_weights=private$model_opts$ard_weights
+        )
+
+        ent$set_train_options(
+            iter=private$train_opts$iter,
+            startELBO=private$train_opts$startELBO,
+            freqELBO=private$train_opts$freqELBO,
+            convergence_mode=private$train_opts$convergence_mode,
+            verbose=private$train_opts$verbose,
+            quiet=private$train_opts$quiet,
+            gpu_mode=private$train_opts$gpu_mode,
+            dropR2=-1 # just to be sure not factor is dropped
+        )
+
+        ent$build()
+        ent$run()
+
         # Manage temp file used for training...
-        outfile = tempfile(patter="mofa_model_", fileext=".hdf5")
-        MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
-            use_basilisk=TRUE)
+        #outfile = tempfile(patter="mofa_model_", fileext=".hdf5")
+        #ent$save(outfile=outfile, save_data=FALSE, expectations="all")
 
-        MOFAobject_trained = MOFA2::load_model(outfile,
-            sort_factors=FALSE,
-            load_data=FALSE,
-            remove_inactive_factors=FALSE)
-        latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
+        #fctrzn = MOFA2::load_model(file=outfile)
 
-        return(list(x=latent_space, jdr=list(mofa=MOFAobject_trained,
-            cols=cols, means=means, norms=norms)))
+        #latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
+        Z = ent$model$nodes$Z$getExpectation()
+        print(Z)
+        colnames(Z) = paste0("Factor", 1:ncol(Z))
+        rownames(Z) = samples
+
+        W = ent$model$nodes$W$getExpectation()
+        names(W) = pars$blocks
+        for (n in names(W)) {
+            rownames(W[[n]]) = colnames(x[[n]])
+            colnames(W[[n]]) = colnames(Z)
+        }
+
+        Tau = ent$model$nodes$Tau$getExpectation()
+        names(Tau) = pars$blocks
+        for (n in names(Tau)) {
+            colnames(Tau[[n]]) = colnames(x[[n]])
+            rownames(Tau[[n]]) = samples
+        }
+
+
+        intercepts = private$.compute_intercepts(x, likelihoods, Z, W, pars)
+
+        return(list(x=Z, jdr=list(cols=cols, means=means,
+            norms=norms, intercepts=intercepts, Z=Z, W=W, Tau=Tau,
+            likelihoods=likelihoods)))
     },
 
     predict_jdr = function(newx, jdr, pars) {
+
+        print("predict")
+
+        #mofa = load_model(file=jdr$mofa)
         
-        if(pars$hvg<1) {
+        if(!is.null(jdr$cols)) {
             n = names(newx)
             newx = lapply(names(newx),
                           function(n) newx[[n]][,jdr$cols[[n]]])
             names(newx) = n
         }
 
-        likelihoods = jdr$mofa@model_options$likelihoods
+        likelihoods = jdr$likelihoods
         for(n in names(newx)) {
             if(likelihoods[n]=="gaussian" & pars$center) {
-                newx[[n]] =  newx[[n]] - matrix(jdr$means[[n]],
-                    ncol=length(jdr$means[[n]]),
-                    nrow=nrow(newx[[n]]),
-                    byrow=TRUE)
+                #newx[[n]] =  newx[[n]] - matrix(jdr$means[[n]],
+                #    ncol=length(jdr$means[[n]]),
+                #    nrow=nrow(newx[[n]]),
+                #    byrow=TRUE)
+                newx[[n]] = scale(newx[[n]], center=jdr$means[[n]], scale=FALSE)
             }
             if(likelihoods[n]=="gaussian" & pars$scale_view) {
                 newx[[n]] =  newx[[n]] / jdr$norms[n]
             }
         }
 
+        # Create list of parameters for MOTL
+        TL_param = list()
+        TL_param$YTrg = newx
+        TL_param$Fctrzn_Lrn_W0 = lapply(jdr$intercepts, \(x) {
+            if (class(x) == "data.frame"){
+                cur = x$intercept
+                names(cur) = rownames(x)
+                return(cur)
+            } else return(x) 
+            })
+        TL_param$Tau = jdr$Tau
+
+        for (view in names(newx)){
+            TL_param$Fctrzn_Lrn_W[[view]] = jdr$W[[view]]
+            TL_param$Fctrzn_Lrn_WSq[[view]] = TL_param$Fctrzn_Lrn_W[[view]]^2
+            print(any(!is.finite(TL_param$Tau[[view]])))
+            TL_param$Tau[[view]] = colMeans(TL_param$Tau[[view]], na.rm = T)
+            TL_param$Tau[[view]] = matrix(TL_param$Tau[[view]],
+                nrow = dim(newx[[view]])[1], ncol = dim(newx[[view]])[2],
+                byrow = T)
+            colnames(TL_param$Tau[[view]]) = colnames(newx[[view]])
+            TL_param$TauLn[[view]] = numeric()
+            if(likelihoods[[view]] == "gaussian"){
+                TL_param$TauLn[[view]] = log(TL_param$Tau[[view]])
+            }
+        }
+        print("TL param ready")
+
+        TL_data=transferLearning_function(TL_param = TL_param, 
+            MaxIterations=pars$MaxIterations, 
+            MinIterations=pars$MinIterations, 
+            minFactors=pars$num_factors,       # To be sure it is always verified
+            StartDropFactor=1e10,    # To be almost sure it never happens
+            FreqDropFactor=1e10,    # If it happens it happens really not often
+            StartELBO=pars$startELBO, 
+            FreqELBO=pars$freqELBO, 
+            DropFactorTH=0,       # No factor can have an explained variance below zero so no factor can be dropped
+            ConvergenceIts=pars$ConvergenceIts, 
+            ConvergenceTH=pars$ConvergenceTH, 
+            CenterTrg=pars$CenterTrg,
+            likelihoods=likelihoods,
+            Z=jdr$Z)
+
+        return(list(x=TL_data$ZMu))
+
         #newx = lapply(newx, t)
 
-        newx = Reduce(cbind, newx)
-        W = Reduce(cbind, lapply(jdr$mofa@expectations$W, t))
-        Z_new = newx %*% MASS::ginv(W) # fastest way
+        #newx = Reduce(cbind, newx)
+        #W = Reduce(cbind, lapply(jdr$mofa@expectations$W, t))
+        #Z_new = newx %*% MASS::ginv(W) # fastest way
 
-        return(list(x=Z_new))
+        #return(list(x=Z_new))
     }
 
   )
