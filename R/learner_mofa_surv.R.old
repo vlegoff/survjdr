@@ -1,0 +1,232 @@
+#' @export
+LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA_old",
+  inherit = LearnerSeqMod,
+  public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    initialize = function() {
+      param_set = ps(
+        blocks=p_uty(tags=c("train", "predict")),
+        clinical_fav=p_lgl(default=TRUE, tags=c("train", "predict")),
+        hvg=p_dbl(0, 1, default=1, tags=c("train", "predict")),
+        center=p_lgl(default=TRUE, tags=c("train", "predict")),
+        scale_views=p_lgl(default=TRUE, tags=c("train", "predict")),
+        likelihoods=p_uty(default=NULL, tags=c("train")),
+        num_factors=p_int(1L, 100L, default=15L, tags=c("train")),
+        spikeslab_factors=p_lgl(default=FALSE, tags=c("train")),
+        spikeslab_weights=p_lgl(default=TRUE, tags=c("train")),
+        ard_factors=p_lgl(default=FALSE, tags=c("train")),
+        ard_weights=p_lgl(default=TRUE, tags=c("train")),
+        maxiter=p_int(1L, default=1000L, tags=c("train")),
+        convergence_mode=p_fct(c("fast", "medium", "slow"),
+                               default="fast", tags=c("train")),
+        startELBO=p_int(default=1L, tags=c("train")),
+        freqELBO=p_int(default=1L, tags=c("train")),
+        gpu_mode=p_lgl(default=FALSE, tags=c("train")),
+        stochastic=p_lgl(default=FALSE, tags=c("train")),
+        verbose=p_lgl(default=FALSE, tags=c("train")),
+        nfolds=p_int(1L, default=10L, tags=c("train")),
+        nlambdas=p_int(10L, 1000L, default=100L, tags=c("train")),
+        CV_measure=p_fct(c("cindex", "ibs", "ibsRR",  "auc", "C", "deviance",
+                           "basic", "V&VH", "linpred"), default="cindex",
+                          tags=c("train")),
+        cv_save_path=p_uty(default=NULL, tags=c("predict")),
+        seed=p_int(0L, special_vals=list(NULL), default=NULL, tags=c("train"))
+      )
+      param_set$values = param_set$default
+
+      super$initialize(
+        id = "surv.mofa_old",
+        packages = c("MOFA2", "mlr3misc"),
+        feature_types = c("integer", "numeric", "factor"),
+        predict_types = c("crank", "lp", "distr"),
+        param_set = param_set,
+        properties = c(),
+        man = "",
+        label = ""
+      )
+    }
+  ),
+  private = list(
+
+    data_opts = NULL,
+    model_opts = NULL,
+    train_opts = NULL,
+
+    # copied from MOFA2 R package
+    .infer_likelihoods = function(x) {
+      
+      # Gaussian by default
+      likelihood <- rep(x="gaussian", times=length(x))
+      names(likelihood) <- names(x)
+      
+      for (m in names(x)) {
+        data <- x[[m]]
+        
+        # bernoulli
+        if (length(unique(data[!is.na(data)]))==2) {
+          likelihood[m] <- "bernoulli"
+        # poisson
+        } else if (all(data[!is.na(data)]%%1==0)) {
+          likelihood[m] <- "poisson"
+        }
+      }
+      
+      return(likelihood)
+    },
+
+    train_jdr = function(x, y, pars) {
+
+        if(pars$hvg<1) {
+            vars = lapply(x, function(xi) apply(xi, 2, var))
+            vars = lapply(vars, sort, decreasing=TRUE)
+            cols = lapply(vars, function(vari)
+                names(vari[1:ceiling(pars$hvg*length(vari))]))
+            n = names(x)
+            x = lapply(names(x), function(n) x[[n]][,cols[[n]]])
+            names(x) = n
+            #x = lapply(x, as.matrix)
+        } else cols = NULL
+
+        likelihoods = pars$likelihoods
+        if(is.null(likelihoods)) {
+            likelihoods = private$.infer_likelihoods(x)
+        }
+
+        means = vector("list", length(x))
+        names(means) = names(x)
+        norms = vector("numeric", length(x))
+        names(norms) = names(x)
+        for(n in names(x)) {
+            means[[n]] = colMeans(x[[n]])
+            if(likelihoods[n]=="gaussian" & pars$center) {
+                x[[n]] =  x[[n]] - matrix(means[[n]],
+                    ncol=length(means[[n]]),
+                    nrow=nrow(x[[n]]),
+                    byrow=TRUE)
+            }
+            norms[n] = norm(x[[n]], type="F")
+            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+                x[[n]] =  x[[n]] / norms[n]
+            }
+        }
+
+        MOFAobject = MOFA2::create_mofa(lapply(x, t))
+
+        if(is.null(private$data_opts)) {
+            private$data_opts = list(
+              scale_views=FALSE,
+              scale_groups=FALSE,
+              center_groups=FALSE,
+              use_float32=FALSE,
+              views=pars$blocks
+            )
+            # Making it more robust
+            default_options = MOFA2::get_default_data_options(MOFAobject)
+            private$data_opts = c(
+                private$data_opts,
+                default_options[
+                    !names(default_options) %in% names(private$data_opts)
+                ]
+            )
+            private$data_opts = private$data_opts[names(default_options)]
+        }
+        if(is.null(private$model_opts)) {
+            private$model_opts = list(
+                likelihoods=likelihoods,
+                num_factors=pars$num_factors,
+                spikeslab_factors=pars$spikeslab_factors,
+                spikeslab_weights=pars$spikeslab_weights,
+                ard_factors=pars$ard_factors,
+                ard_weights=pars$ard_weights
+            )
+            # Just for the likelihoods trick to work later
+            private$model_opts = private$model_opts[
+                !sapply(private$model_opts, is.null)
+            ]
+            default_options = MOFA2::get_default_model_options(MOFAobject)
+            private$model_opts = c(
+                private$model_opts,
+                default_options[
+                    !names(default_options) %in% names(private$model_opts)
+                ]
+            )
+            private$model_opts = private$model_opts[names(default_options)]
+        }
+        if(is.null(private$train_opts)) {
+            private$train_opts = list(
+                maxiter=pars$maxiter,
+                convergence_mode=pars$convergence_mode,
+                verbose=pars$verbose,
+                startELBO=pars$startELBO,
+                freqELBO=pars$freqELBO,
+                gpu_mode=pars$gpu_mode,
+                stochastic=pars$stochastic
+            )
+            default_options = MOFA2::get_default_training_options(MOFAobject)
+            private$train_opts = c(
+                private$train_opts,
+                default_options[
+                    !names(default_options) %in% names(private$train_opts)
+                ]
+            )
+            private$train_opts = private$train_opts[names(default_options)]
+        }
+
+        MOFAobject = MOFA2::prepare_mofa(
+            object=MOFAobject,
+            data_options=private$data_opts,
+            model_options=private$model_opts,
+            training_options=private$train_opts
+        )
+
+        # Manage temp file used for training...
+        outfile = tempfile(patter="mofa_model_", fileext=".hdf5")
+        MOFAobject_trained = MOFA2::run_mofa(MOFAobject, outfile,
+            use_basilisk=TRUE)
+
+        MOFAobject_trained = MOFA2::load_model(outfile,
+            sort_factors=FALSE,
+            load_data=FALSE,
+            remove_inactive_factors=FALSE)
+        latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
+
+        return(list(x=latent_space, jdr=list(mofa=MOFAobject_trained,
+            cols=cols, means=means, norms=norms)))
+    },
+
+    predict_jdr = function(newx, jdr, pars) {
+        
+        if(pars$hvg<1) {
+            n = names(newx)
+            newx = lapply(names(newx),
+                          function(n) newx[[n]][,jdr$cols[[n]]])
+            names(newx) = n
+        }
+
+        likelihoods = jdr$mofa@model_options$likelihoods
+        for(n in names(newx)) {
+            if(likelihoods[n]=="gaussian" & pars$center) {
+                newx[[n]] =  newx[[n]] - matrix(jdr$means[[n]],
+                    ncol=length(jdr$means[[n]]),
+                    nrow=nrow(newx[[n]]),
+                    byrow=TRUE)
+            }
+            if(likelihoods[n]=="gaussian" & pars$scale_view) {
+                newx[[n]] =  newx[[n]] / jdr$norms[n]
+            }
+        }
+
+        #newx = lapply(newx, t)
+
+        newx = Reduce(cbind, newx)
+        W = Reduce(cbind, lapply(jdr$mofa@expectations$W, t))
+        Z_new = newx %*% MASS::ginv(W) # fastest way
+
+        return(list(x=Z_new))
+    }
+
+  )
+)
+
+.extralrns_dict$add("surv.mofa_old", LearnerSurvMOFA_old)

@@ -12,7 +12,10 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
         "CV_measure", "cv_save_path", "seed")
         # check if necessary pars are in pars set
         if (!all(necessary_pars %in% param_set$ids())) {
-            stop("missing parameters")
+            missing_params = setdiff(necessary_pars,
+                intersect(param_set$ids(), necessary_pars))
+            stop(paste("missing parameters: ",
+                 paste(missing_params, collapse=", ")))
         }
 
         packages = c(packages, "glmnet", "survival", "survAUC", "SurvMetrics",
@@ -44,6 +47,7 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
       #source("R/misc/learner_utils.R")
       # get parameters for training
       pars = self$param_set$get_values(tags="train")
+      pars$task_id = task$id
 
       # Load data
       x = task$data(cols=task$feature_names)
@@ -83,11 +87,16 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
         block_list[["clinical"]] = clinicals
       }
 
+      #mean1=apply(block_list[[1]], 2, mean)
       JDR = private$train_jdr(block_list, ysurv, pars)
+      #mean2=apply(block_list[[1]], 2, mean)
+      #print(mean1-mean2)
 
       if (pars$clinical_fav) { # adding clinical data if necessary
         JDR$x = cbind(JDR$x, clinicals)
       }
+
+      #print(JDR$x)
 
       # implement case where there is only 1 comp and no clinical data
       if (ncol(JDR$x)==1) {
@@ -331,9 +340,9 @@ LearnerSeqMod = R6::R6Class("LearnerSeqMod",
           rlang::hash(to_save), ".rds"))
       }
 
-      return(mlr3proba::.surv_return(times=fit$time,
-                                     surv=t(fit$surv),
-                                     lp=lp))
+      return(mlr3proba::surv_return(times=fit$time,
+                                    surv=t(fit$surv),
+                                    lp=lp))
 
     }
   )

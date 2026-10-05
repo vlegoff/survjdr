@@ -88,7 +88,7 @@ LearnerSurvCVPrioritylasso <- R6::R6Class("LearnerSurvCVPrioritylasso",
         #times = self$model$y[, 1],
         #surv = surv,
         #lp = lp
-      return(mlr3proba::.surv_return(
+      return(mlr3proba::surv_return(
         times = surv$time,
         surv = t(surv$surv),
         lp = lp

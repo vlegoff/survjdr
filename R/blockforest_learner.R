@@ -63,7 +63,7 @@ LearnerSurvBlockForest <- R6::R6Class("LearnerSurvBlockForest",
     .predict = function(task) {
       pv <- self$param_set$get_values(tags = "predict")
       prediction <- mlr3misc::invoke(predict, self$model$forest, data = task$data(cols = task$feature_names), .args = pv)
-      return(mlr3proba::.surv_return(times = prediction$unique.death.times, surv = prediction$survival))
+      return(mlr3proba::surv_return(times = prediction$unique.death.times, surv = prediction$survival))
     }
   )
 )

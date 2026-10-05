@@ -103,9 +103,9 @@ LearnerSurvIPF = R6::R6Class("LearnerSurvIPF",
       lp = predict(self$model$coxph,
                    newdata=newx[,self$model$nz, with=FALSE])
 
-      return(mlr3proba::.surv_return(times=fit$time,
-                                     surv=t(fit$surv),
-                                     lp=lp))
+      return(mlr3proba::surv_return(times=fit$time,
+                                    surv=t(fit$surv),
+                                    lp=lp))
 
     }
   )

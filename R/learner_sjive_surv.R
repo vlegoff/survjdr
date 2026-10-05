@@ -81,7 +81,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
               paste0(
                   rep(pars$blocks, each=pars$rankA),
                   ".",
-                  rep(1:pars$rankA, pars$rankA)
+                  rep(1:pars$rankA, length(pars$blocks))
               )
         } else {
           latent_space[,1:private$jive_args$rankJ] = t(pred$Sj)
@@ -93,7 +93,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
               paste0(
                   rep(pars$blocks, each=pars$rankA),
                   ".",
-                  rep(1:pars$rankA, pars$rankA)
+                  rep(1:pars$rankA, length(pars$blocks))
               )
           )
         }
@@ -130,7 +130,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
               paste0(
                   rep(pars$blocks, each=pars$rankA),
                   ".",
-                  rep(1:pars$rankA, pars$rankA)
+                  rep(1:pars$rankA, length(pars$blocks))
               )
         } else {
           latent_space[,1:private$jive_args$rankJ] = t(predict$Sj)
@@ -142,7 +142,7 @@ LearnerSurvSJIVE = R6::R6Class("LearnerSurvSJIVE",
               paste0(
                   rep(pars$blocks, each=pars$rankA),
                   ".",
-                  rep(1:pars$rankA, pars$rankA)
+                  rep(1:pars$rankA, length(pars$blocks))
               )
           )
         }

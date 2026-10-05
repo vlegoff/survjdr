@@ -66,10 +66,10 @@ LearnerSurvJIVE = R6::R6Class("LearnerSurvJIVE",
 
         colnames(latent_space) = c(
             paste0("common.", 1:pars$rankJ),
-            paste0(
+            paste(
                 rep(pars$blocks, each=pars$rankA),
-                ".",
-                rep(1:pars$rankA, pars$rankA)
+                rep(1:pars$rankA, length(pars$block)),
+                sep="."
             )
         )
 
@@ -92,10 +92,10 @@ LearnerSurvJIVE = R6::R6Class("LearnerSurvJIVE",
 
         colnames(latent_space) = c(
             paste0("common.", 1:pars$rankJ),
-            paste0(
+            paste(
                 rep(pars$blocks, each=pars$rankA),
-                ".",
-                rep(1:pars$rankA, pars$rankA)
+                rep(1:pars$rankA, length(pars$block)),
+                sep="."
             )
         )
 

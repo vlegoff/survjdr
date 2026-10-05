@@ -87,15 +87,10 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         means = colMeans(x, na.rm=TRUE)
         intercept_naive = log(means/(1-means))
         ZW = Z %*% t(W)
-        #intercept = sapply(
-            #1:ncol(ZW),
-            #\(d) private$.bernoulli_intercept_variable(x[,d], ZW[,d], intercept_naive[d])
-        #)
         intercept = Reduce(rbind, lapply(
             1:ncol(ZW),
             \(d) private$.bernoulli_intercept_variable(x[,d], ZW[,d], intercept_naive[d])
         ))
-        #names(intercept) = colnames(x)
         rownames(intercept) = colnames(x)
         return(intercept)
     },
@@ -105,22 +100,13 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             ll = dbinom(x, size=1, prob=plogis(zw + beta0))
             return(-sum(log(ll[ll!=0])))
         }
-        #print(start)
         intercept = tryCatch({
-            #fit = stats4::mle(private$.bernoulli_loglik,
-                #start=list(beta0=start),
-                #fixed=list(zw=zw, x=x, fixed_test=5))@coef[1]
             fit = stats4::mle(loglik, start=list(beta0=start))@coef[1]
             if (!is.finite(fit)) stop()
             return(data.frame(intercept=fit, method="MLE"))
-            #return(intercept_fit)
         }, error=\(e) {
             return(data.frame(intercept=start, method="naive"))
-            #return(start)
         })
-        #if (is.infinite(intercept$intercept)) {
-            #print(x)
-        #}
         return(intercept)
     },
 
@@ -144,32 +130,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
                 }
             } else if (likelihoods[[b]]=="bernoulli") {
                 intercept[[b]] = private$.bernoulli_intercept_block(x[[b]], Z, W[[b]])
-                #print(intercept[[b]])
-                #means = colMeans(x[[b]], na.rm=TRUE)
-                #intercept_naive = log(means/(1-means))
-                #ZW = Z %*% t(W[[b]])
-                #intercept[[b]] = Reduce(rbind, lapply(1:ncol(ZW),
-                #    \(col) {
-                #        loglik = function(beta0) {
-                #            plog = plogis(ZW[,col] + beta0)
-                #            dens = dbinom(x[[b]][,col], size=1, plog)
-                #            -sum(log(dens[dens!=0]))
-                #        }
-                #        intercept_fit = try(stats4::mle(loglik,
-                #            start=list(beta0=intercept_naive[col]))@coef[1])
-
-                #        if (class(intercept_fit) == "try-error") {
-                #            intercept = intercept_naive[col]
-                #            intercept_method = "naive"
-                #        } else {
-                #            intercept = intercept_fit
-                #            intercept_method = "MLE"
-                #        }
-                #        
-                #        return(data.frame(intercept=intercept,
-                #                          method=intercept_method))
-                #    }
-                #))
             } else {
                 stop(paste0("intercept for likelihood ", likelihoods[[b]],
                     " has not been implemented"))
@@ -212,10 +172,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
             means[[n]] = colMeans(x[[n]])
             print(length(means[[n]]))
             if(likelihoods[n]=="gaussian" & pars$center) {
-                #x[[n]] =  x[[n]] - matrix(means[[n]],
-                #    ncol=length(means[[n]]),
-                #    nrow=nrow(x[[n]]),
-                #    byrow=TRUE)
                 x[[n]] = scale(x[[n]], center=means[[n]], scale=FALSE)
             }
             # sqrt(n*p) is needed because MOFA divides by the standard dev.
@@ -325,7 +281,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
 
         #fctrzn = MOFA2::load_model(file=outfile)
 
-        #latent_space = Reduce(rbind, MOFAobject_trained@expectations$Z)
         Z = ent$model$nodes$Z$getExpectation()
         print(Z)
         colnames(Z) = paste0("Factor", 1:ncol(Z))
@@ -369,10 +324,6 @@ LearnerSurvMOFA = R6::R6Class("LearnerSurvMOFA",
         likelihoods = jdr$likelihoods
         for(n in names(newx)) {
             if(likelihoods[n]=="gaussian" & pars$center) {
-                #newx[[n]] =  newx[[n]] - matrix(jdr$means[[n]],
-                #    ncol=length(jdr$means[[n]]),
-                #    nrow=nrow(newx[[n]]),
-                #    byrow=TRUE)
                 newx[[n]] = scale(newx[[n]], center=jdr$means[[n]], scale=FALSE)
             }
             if(likelihoods[n]=="gaussian" & pars$scale_view) {

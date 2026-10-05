@@ -51,10 +51,8 @@ LearnerSurvSGCCA = R6::R6Class("LearnerSurvSGCCA",
             }
 
             # sparsity percentage per block
-            print(sapply(x, ncol))
             sparsity = pars$sparsity/sapply(x, ncol) + (1-pars$sparsity)
             if (pars$supervised) sparsity = c(sparsity, 1)
-            print(sparsity)
 
             private$rgcca_args = list(
                 response=if(pars$supervised) length(x) + 1,
@@ -80,7 +78,7 @@ LearnerSurvSGCCA = R6::R6Class("LearnerSurvSGCCA",
             rgcca_fit$Y[names(rgcca_fit$Y)!="residuals"])
         colnames(comps) = paste(
             rep(pars$blocks, each=private$rgcca_args$ncomp),
-            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, length(pars$blocks)),
             sep="."
         )
         #for (b in names(rgcca_fit$blocks)) { # trick to avoid storing blocks, not working though
@@ -99,7 +97,7 @@ LearnerSurvSGCCA = R6::R6Class("LearnerSurvSGCCA",
         pred_space = Reduce(cbind, rgcca_pred[names(rgcca_pred)!="residuals"])
         colnames(pred_space) = paste(
             rep(pars$blocks, each=private$rgcca_args$ncomp),
-            rep(1:private$rgcca_args$ncomp, private$rgcca_args$ncomp),
+            rep(1:private$rgcca_args$ncomp, length(pars$blocks)),
             sep="."
         )
         return(list(x=pred_space))
